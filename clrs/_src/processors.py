@@ -395,6 +395,7 @@ class PGN(Processor):
       mid_act: Optional[_Fn] = None,
       activation: Optional[_Fn] = jax.nn.relu,
       reduction: _Fn = jnp.max,
+      update: Optional[_Fn] = None, # if None, use element-wise sum
       msgs_mlp_sizes: Optional[List[int]] = None,
       use_ln: bool = False,
       use_triplets: bool = False,
@@ -412,12 +413,13 @@ class PGN(Processor):
     self.mid_act = mid_act
     self.activation = activation
     self.reduction = reduction
+    self.update = update
     self._msgs_mlp_sizes = msgs_mlp_sizes
     self.use_ln = use_ln
     self.use_triplets = use_triplets
     self.nb_triplet_fts = nb_triplet_fts
     self.gated = gated
-    self.differential = differential 
+    self.differential = differential
 
   def __call__(  # pytype: disable=signature-mismatch  # numpy-scalars
       self,
@@ -491,7 +493,10 @@ class PGN(Processor):
     h_1 = o1(z)
     h_2 = o2(msgs)
 
-    ret = h_1 + h_2
+    if self.update is not None and self.update == jnp.maximum:
+      ret = self.update(h_1, h_2)
+    else:
+      ret = h_1 + h_2
 
     if self.activation is not None:
       ret = self.activation(ret)
