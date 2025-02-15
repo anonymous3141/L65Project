@@ -19,6 +19,7 @@ import functools
 import os
 import shutil
 from typing import Any, Dict, List, Optional
+import wandb
 
 from absl import app
 from absl import flags
@@ -396,8 +397,17 @@ def create_samplers(
           test_samplers, test_sample_counts,
           spec_list)
 
-
+def get_wandb_name():
+  import time
+  s=time.gmtime(time.time())
+  return f"{time.strftime("%Y-%m-%d %H:%M:%S", s)}-{FLAGS["algorithms"].value}-{FLAGS['processor_type'].value}"
 def main(unused_argv):
+  run = wandb.init(
+    project = "L65-project",
+    config = {name: FLAGS[name].value for name in FLAGS},
+    name = get_wandb_name()               
+  )
+
   if FLAGS.hint_mode == 'encoded_decoded':
     encode_hints = True
     decode_hints = True
@@ -496,6 +506,7 @@ def main(unused_argv):
       else:
         train_model.init(all_features, FLAGS.seed + 1)
 
+    wandb_log = {}
     # Training step.
     for algo_idx in range(len(train_samplers)):
       feedback = feedback_list[algo_idx]
@@ -519,6 +530,10 @@ def main(unused_argv):
       logging.info('Algo %s step %i current loss %f, current_train_items %i.',
                    FLAGS.algorithms[algo_idx], step,
                    cur_loss, current_train_items[algo_idx])
+      
+      wandb_log[f"{FLAGS.algorithms[algo_idx]}_loss"] = cur_loss
+      wandb_log['step'] = step 
+      wandb_log[f"{current_train_items[algo_idx]}_examples_seen"] = current_train_items[algo_idx]
 
     # Periodically evaluate model
     if step >= next_eval:
@@ -548,8 +563,16 @@ def main(unused_argv):
              f'{best_score/len(FLAGS.algorithms):.3f}, '
              f'current avg val score is {np.mean(val_scores):.3f}, '
              f'val scores are: ')
+      
       msg += ', '.join(
           ['%s: %.3f' % (x, y) for (x, y) in zip(FLAGS.algorithms, val_scores)])
+      
+      for (x, y) in zip(FLAGS.algorithms, val_scores):
+        wandb_log[f"val_score_{x}"] = y 
+      wandb_log['best_avg_val_score'] = best_score/len(FLAGS.algorithms)
+      wandb_log['cur_avg_val_score'] = np.mean(val_scores)
+      wandb_log['length_idx'] = length_idx
+
       if (sum(val_scores) > best_score) or step == 0:
         best_score = sum(val_scores)
         logging.info('Checkpointing best model, %s', msg)
@@ -557,12 +580,15 @@ def main(unused_argv):
       else:
         logging.info('Not saving new best model, %s', msg)
 
+    wandb.log(wandb_log)
+
     step += 1
     length_idx = (length_idx + 1) % len(train_lengths)
 
   logging.info('Restoring best model from checkpoint...')
   eval_model.restore_model('best.pkl', only_load_processor=False)
 
+  wandb_logger = {}
   for algo_idx in range(len(train_samplers)):
     common_extras = {'examples_seen': current_train_items[algo_idx],
                      'step': step,
@@ -576,9 +602,11 @@ def main(unused_argv):
         new_rng_key,
         extras=common_extras)
     logging.info('(test) algo %s : %s', FLAGS.algorithms[algo_idx], test_stats)
+    wandb_logger[f"{FLAGS.algorithms[algo_idx]}_test_score"] = test_stats['score']
+  wandb.log(wandb_logger)
 
   logging.info('Done!')
-
+  run.finish()
 
 if __name__ == '__main__':
   app.run(main)

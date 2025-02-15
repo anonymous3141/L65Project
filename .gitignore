@@ -5,7 +5,7 @@
 build/
 dist/
 venv/
-
+clrs_env/
 # Mac OS
 .DS_Store
 
@@ -17,3 +17,9 @@ venv/
 # Editors
 .idea
 .vscode
+
+# my own stuff
+~/*
+checkpoint/
+run_commands.txt
+wandb/
