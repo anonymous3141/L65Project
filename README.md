@@ -29,6 +29,8 @@ clash with your Python installation:
 ```shell
 python3 -m venv clrs_env
 source clrs_env/bin/activate
+
+# Junhua: I think you should do "pip install -e ." instead
 pip install git+https://github.com/google-deepmind/clrs.git
 ```
 

@@ -229,7 +229,7 @@ class GATv2(Processor):
     w_2 = hk.Linear(self.mid_size)
     w_e = hk.Linear(self.mid_size)
     w_g = hk.Linear(self.mid_size)
-
+    
     a_heads = []
     for _ in range(self.nb_heads):
       a_heads.append(hk.Linear(1))
@@ -401,6 +401,7 @@ class PGN(Processor):
       nb_triplet_fts: int = 8,
       gated: bool = False,
       name: str = 'mpnn_aggr',
+      differential: bool = False 
   ):
     super().__init__(name=name)
     if mid_size is None:
@@ -416,6 +417,7 @@ class PGN(Processor):
     self.use_triplets = use_triplets
     self.nb_triplet_fts = nb_triplet_fts
     self.gated = gated
+    self.differential = differential 
 
   def __call__(  # pytype: disable=signature-mismatch  # numpy-scalars
       self,
@@ -438,6 +440,7 @@ class PGN(Processor):
     m_2 = hk.Linear(self.mid_size)
     m_e = hk.Linear(self.mid_size)
     m_g = hk.Linear(self.mid_size)
+    m_kappa = hk.Linear(self.mid_size) if self.differential else None 
 
     o1 = hk.Linear(self.out_size)
     o2 = hk.Linear(self.out_size)
@@ -462,6 +465,11 @@ class PGN(Processor):
     msgs = (
         jnp.expand_dims(msg_1, axis=1) + jnp.expand_dims(msg_2, axis=2) +
         msg_e + jnp.expand_dims(msg_g, axis=(1, 2)))
+    
+    if self.differential:
+      # subtraction 
+      msg_kappa = m_kappa(z)
+      msgs -= jnp.expand_dims(msg_kappa, axis=1)
 
     if self._msgs_mlp_sizes is not None:
       msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs))
@@ -893,6 +901,16 @@ def get_processor_factory(kind: str,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+      )
+
+    elif kind == "differential_mpnn":
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True
       )
     else:
       raise ValueError('Unexpected processor kind ' + kind)
