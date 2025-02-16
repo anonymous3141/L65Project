@@ -402,7 +402,8 @@ class PGN(Processor):
       nb_triplet_fts: int = 8,
       gated: bool = False,
       name: str = 'mpnn_aggr',
-      differential: bool = False 
+      differential: bool = False,
+      differential_config = {}
   ):
     super().__init__(name=name)
     if mid_size is None:
@@ -420,6 +421,9 @@ class PGN(Processor):
     self.nb_triplet_fts = nb_triplet_fts
     self.gated = gated
     self.differential = differential
+
+    # writing good code is for nerds
+    self.differential_config = differential_config 
 
   def __call__(  # pytype: disable=signature-mismatch  # numpy-scalars
       self,
@@ -473,7 +477,7 @@ class PGN(Processor):
       # subtraction 
       # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
       msg_kappa = m_kappa(z)
-      msgs -= jnp.expand_dims(msg_kappa, axis=2) 
+      msgs -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
 
     if self._msgs_mlp_sizes is not None:
       msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs))
@@ -918,6 +922,19 @@ def get_processor_factory(kind: str,
           use_triplets=False,
           nb_triplet_fts=0,
           differential = True
+      )
+
+    elif kind == "differential_mpnn2":
+      # only subtract fixed baseline from the maximum as opposed to modifying every message 
+      # (I think). Or it is the other way around (pretty sure not). Its 1am lol
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True,
+          differential_config = {'baseline_broadcast_axis' : 1}
       )
     else:
       raise ValueError('Unexpected processor kind ' + kind)

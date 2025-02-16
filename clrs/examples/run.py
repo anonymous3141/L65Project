@@ -110,7 +110,7 @@ flags.DEFINE_enum('processor_type', 'triplet_gmpnn',
                    'triplet_mpnn', 'triplet_pgn', 'triplet_pgn_mask',
                    'gat', 'gatv2', 'gat_full', 'gatv2_full',
                    'gpgn', 'gpgn_mask', 'gmpnn',
-                   'triplet_gpgn', 'triplet_gpgn_mask', 'triplet_gmpnn', 'differential_mpnn'],
+                   'triplet_gpgn', 'triplet_gpgn_mask', 'triplet_gmpnn', 'differential_mpnn', 'differential_mpnn2'],
                   'Processor type to use as the network P.')
 
 flags.DEFINE_string('checkpoint_path', '/tmp/CLRS30',
