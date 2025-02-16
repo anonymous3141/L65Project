@@ -408,6 +408,7 @@ def main(unused_argv):
     name = get_wandb_name()               
   )
 
+  FLAGS.checkpoint_path = os.path.join(FLAGS.checkpoint_path,get_wandb_name())
   if FLAGS.hint_mode == 'encoded_decoded':
     encode_hints = True
     decode_hints = True
@@ -586,7 +587,10 @@ def main(unused_argv):
     length_idx = (length_idx + 1) % len(train_lengths)
 
   logging.info('Restoring best model from checkpoint...')
+
   eval_model.restore_model('best.pkl', only_load_processor=False)
+
+  run.log_artifact(os.path.join(FLAGS.checkpoint_path, 'best.pkl'), type="model")
 
   wandb_logger = {}
   for algo_idx in range(len(train_samplers)):

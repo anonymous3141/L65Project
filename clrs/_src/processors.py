@@ -442,7 +442,7 @@ class PGN(Processor):
     m_2 = hk.Linear(self.mid_size)
     m_e = hk.Linear(self.mid_size)
     m_g = hk.Linear(self.mid_size)
-    m_kappa = hk.Linear(self.mid_size) if self.differential else None 
+    m_kappa = hk.nets.MLP(self._msgs_mlp_sizes) if self.differential else None 
 
     o1 = hk.Linear(self.out_size)
     o2 = hk.Linear(self.out_size)
@@ -464,14 +464,16 @@ class PGN(Processor):
       if self.activation is not None:
         tri_msgs = self.activation(tri_msgs)
 
+    # (B, N, N, C). A[b][i][j] is the message from node i to node j 
     msgs = (
         jnp.expand_dims(msg_1, axis=1) + jnp.expand_dims(msg_2, axis=2) +
         msg_e + jnp.expand_dims(msg_g, axis=(1, 2)))
     
     if self.differential:
       # subtraction 
+      # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
       msg_kappa = m_kappa(z)
-      msgs -= jnp.expand_dims(msg_kappa, axis=1)
+      msgs -= jnp.expand_dims(msg_kappa, axis=2) 
 
     if self._msgs_mlp_sizes is not None:
       msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs))
@@ -486,7 +488,7 @@ class PGN(Processor):
       maxarg = jnp.where(jnp.expand_dims(adj_mat, -1),
                          msgs,
                          -BIG_NUMBER)
-      msgs = jnp.max(maxarg, axis=1)
+      msgs = jnp.max(maxarg, axis=1) # reduce along axis 1
     else:
       msgs = self.reduction(msgs * jnp.expand_dims(adj_mat, -1), axis=1)
 
