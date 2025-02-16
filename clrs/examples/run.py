@@ -534,7 +534,7 @@ def main(unused_argv):
       
       wandb_log[f"{FLAGS.algorithms[algo_idx]}_loss"] = cur_loss
       wandb_log['step'] = step 
-      wandb_log[f"{current_train_items[algo_idx]}_examples_seen"] = current_train_items[algo_idx]
+      wandb_log[f"{FLAGS.algorithms[algo_idx]}_examples_seen"] = current_train_items[algo_idx]
 
     # Periodically evaluate model
     if step >= next_eval:
