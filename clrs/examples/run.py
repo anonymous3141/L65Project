@@ -400,7 +400,7 @@ def create_samplers(
 def get_wandb_name():
   import time
   s=time.gmtime(time.time())
-  return f"{time.strftime("%Y-%m-%d %H:%M:%S", s)}-{FLAGS["algorithms"].value}-{FLAGS['processor_type'].value}"
+  return f"{time.strftime('%Y-%m-%d %H:%M:%S', s)}-{FLAGS['algorithms'].value}-{FLAGS['processor_type'].value}"
 def main(unused_argv):
   run = wandb.init(
     project = "L65-project",
