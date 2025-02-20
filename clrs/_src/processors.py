@@ -476,7 +476,7 @@ class PGN(Processor):
     if self.differential:
       # subtraction 
       # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
-      msg_kappa = m_kappa(z)
+      msg_kappa = node_fts if self.differential_config.get("kappa") == "identity" else m_kappa(z) 
       msgs -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
 
     if self._msgs_mlp_sizes is not None:
@@ -936,6 +936,20 @@ def get_processor_factory(kind: str,
           differential = True,
           differential_config = {'baseline_broadcast_axis' : 1}
       )
+    
+    elif kind == "differential_mpnn_identity":
+      # Only subtracting the identity of the node features.
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          reduction=jnp.sum, # use sum upon Petar's suggestion
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True,
+          differential_config = {'kappa': 'identity'}
+      )
+
     else:
       raise ValueError('Unexpected processor kind ' + kind)
 
