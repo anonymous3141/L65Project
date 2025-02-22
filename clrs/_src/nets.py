@@ -164,7 +164,7 @@ class Net(hk.Module):
             probing.DataPoint(
                 name=hint.name, location=loc, type_=typ, data=hint_data))
 
-    hiddens, output_preds_cand, hint_preds, lstm_state = self._one_step_pred(
+    hiddens, output_preds_cand, hint_preds, lstm_state, aux_info = self._one_step_pred(
         inputs, cur_hint, mp_state.hiddens,
         batch_size, nb_nodes, mp_state.lstm_state,
         spec, encs, decs, repred)
@@ -192,7 +192,7 @@ class Net(hk.Module):
 
     # Complying to jax.scan, the first returned value is the state we carry over
     # the second value is the output that will be stacked over steps.
-    return new_mp_state, accum_mp_state
+    return new_mp_state, (accum_mp_state, aux_info)
 
   def __call__(self, features_list: List[_Features], repred: bool,
                algorithm_index: int,
@@ -282,7 +282,7 @@ class Net(hk.Module):
           return_hints=return_hints,
           return_all_outputs=return_all_outputs,
           )
-      mp_state, lean_mp_state = self._msg_passing_step(
+      mp_state, (lean_mp_state, aux_info) = self._msg_passing_step(
           mp_state,
           i=0,
           first_step=True,
@@ -294,7 +294,8 @@ class Net(hk.Module):
           first_step=False,
           **common_args)
 
-      output_mp_state, accum_mp_state = hk.scan(
+      # JC: I'm assuming this rolls out the algorithm
+      output_mp_state, (accum_mp_state, stacked_aux_info) = hk.scan(
           scan_fn,
           mp_state,
           jnp.arange(nb_mp_steps - 1) + 1,
@@ -324,7 +325,8 @@ class Net(hk.Module):
       hiddens = jnp.stack([v for v in accum_mp_state.hiddens])
       return output_preds, hint_preds, hiddens
 
-    return output_preds, hint_preds
+    # 
+    return output_preds, hint_preds, jax.tree_map(lambda x, y: jnp.concatenate([jnp.array([x]), y]), aux_info, stacked_aux_info)
 
   def _construct_encoders_decoders(self):
     """Constructs encoders and decoders, separate for each algorithm."""
@@ -404,8 +406,9 @@ class Net(hk.Module):
 
     # PROCESS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     nxt_hidden = hidden
+    aux_info = None 
     for _ in range(self.nb_msg_passing_steps):
-      nxt_hidden, nxt_edge = self.processor(
+      nxt_hidden, nxt_edge, aux_info = self.processor(
           node_fts,
           edge_fts,
           graph_fts,
@@ -445,7 +448,9 @@ class Net(hk.Module):
         repred=repred,
     )
 
-    return nxt_hidden, output_preds, hint_preds, nxt_lstm_state
+    # we return only aux_info corresponding to last message passing step
+    # this is fine, there usually is only 1 anyhow
+    return nxt_hidden, output_preds, hint_preds, nxt_lstm_state, aux_info 
 
 
 class NetChunked(Net):

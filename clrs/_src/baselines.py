@@ -317,13 +317,13 @@ class BaselineModel(model.Model):
     return self._maybe_pmean(lss), self._maybe_pmean(grads)
 
   def _feedback(self, params, rng_key, feedback, opt_state, algorithm_index):
-    lss, grads = jax.value_and_grad(self._loss)(
+    (lss, aux_info), grads = jax.value_and_grad(self._loss, has_aux=True)(
         params, rng_key, feedback, algorithm_index)
     grads = self._maybe_pmean(grads)
     params, opt_state = self._update_params(params, grads, opt_state,
                                             algorithm_index)
     lss = self._maybe_pmean(lss)
-    return lss, params, opt_state
+    return lss, params, opt_state, aux_info
 
   def _predict(self, params, rng_key: hk.PRNGSequence, features: _Features,
                algorithm_index: int, return_hints: bool,
@@ -336,7 +336,7 @@ class BaselineModel(model.Model):
     if self.debug:
       outs, hint_preds, hidden_states = net_outputs
     else:
-      outs, hint_preds = net_outputs
+      outs, hint_preds, aux_info = net_outputs
     outs = decoders.postprocess(self._spec[algorithm_index],
                                 outs,
                                 sinkhorn_temperature=0.1,
@@ -346,7 +346,7 @@ class BaselineModel(model.Model):
     if self.debug:
       return outs, hint_preds, hidden_states
     else:
-      return outs, hint_preds
+      return outs, hint_preds, aux_info
 
   def compute_grad(
       self,
@@ -379,11 +379,11 @@ class BaselineModel(model.Model):
     # Calculate and apply gradients.
     rng_keys = _maybe_pmap_rng_key(rng_key)  # pytype: disable=wrong-arg-types  # numpy-scalars
     feedback = _maybe_pmap_data(feedback)
-    loss, self._device_params, self._device_opt_state = self.jitted_feedback(
+    loss, self._device_params, self._device_opt_state, aux_info = self.jitted_feedback(
         self._device_params, rng_keys, feedback,
         self._device_opt_state, algorithm_index)
     loss = _maybe_pick_first_pmapped(loss)
-    return loss
+    return loss, aux_info
 
   def predict(self, rng_key: hk.PRNGSequence, features: _Features,
               algorithm_index: Optional[int] = None,
@@ -411,10 +411,8 @@ class BaselineModel(model.Model):
         algorithm_index=algorithm_index,
         return_hints=True,
         return_all_outputs=False)
-    if self.debug:
-      output_preds, hint_preds, _ = outputs
-    else:
-      output_preds, hint_preds = outputs
+    
+    output_preds, hint_preds, aux_info = outputs
 
     nb_nodes = _nb_nodes(feedback, is_chunked=False)
     lengths = feedback.features.lengths
@@ -438,7 +436,7 @@ class BaselineModel(model.Model):
             nb_nodes=nb_nodes,
         )
 
-    return total_loss
+    return total_loss, aux_info
 
   def _update_params(self, params, grads, opt_state, algorithm_index):
     updates, opt_state = filter_null_grads(
@@ -529,7 +527,7 @@ class BaselineModelChunked(BaselineModel):
           processor_factory, use_lstm, encoder_init, dropout_prob,
           hint_teacher_forcing, hint_repred_mode,
           self.nb_dims, self.nb_msg_passing_steps)(*args, **kwargs)
-
+    
     self.net_fn = hk.transform(_use_net)
     pmap_args = dict(axis_name='batch', devices=jax.local_devices())
     n_devices = jax.local_device_count()

@@ -30,6 +30,12 @@ _Fn = Callable[..., Any]
 BIG_NUMBER = 1e6
 PROCESSOR_TAG = 'clrs_processor'
 
+def get_statistics(arr, prefix=None):
+  return {
+      f'{prefix}_mean': jnp.mean(jnp.mean(arr, axis=-1)),
+      f'{prefix}_avg_std': jnp.mean(jnp.std(arr, axis=-1)),
+      f'{prefix}_avg_norm': jnp.mean(jnp.linalg.norm(arr, axis=-1))
+  }
 
 class Processor(hk.Module):
   """Processor abstract base class."""
@@ -457,6 +463,7 @@ class PGN(Processor):
     msg_g = m_g(graph_fts)
 
     tri_msgs = None
+    aux_info = {}
 
     if self.use_triplets:
       # Triplet messages, as done by Dudzik and Velickovic (2022)
@@ -473,11 +480,14 @@ class PGN(Processor):
         jnp.expand_dims(msg_1, axis=1) + jnp.expand_dims(msg_2, axis=2) +
         msg_e + jnp.expand_dims(msg_g, axis=(1, 2)))
     
+    aux_info.update(get_statistics(msgs,'no_subtraction_msg'))
+
     if self.differential:
       # subtraction 
       # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
       msg_kappa = node_fts if self.differential_config.get("kappa") == "identity" else m_kappa(z) 
       msgs -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
+      aux_info.update(get_statistics(msgs,'post_subtraction_msg'))
 
     if self._msgs_mlp_sizes is not None:
       msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs))
@@ -496,6 +506,7 @@ class PGN(Processor):
     else:
       msgs = self.reduction(msgs * jnp.expand_dims(adj_mat, -1), axis=1)
 
+    aux_info.update(get_statistics(msgs,'aggregated_msg'))
     h_1 = o1(z)
     h_2 = o2(msgs)
 
@@ -517,8 +528,9 @@ class PGN(Processor):
       gate3 = hk.Linear(self.out_size, b_init=hk.initializers.Constant(-3))
       gate = jax.nn.sigmoid(gate3(jax.nn.relu(gate1(z) + gate2(msgs))))
       ret = ret * gate + hidden * (1-gate)
+    aux_info.update(get_statistics(ret,'new_embedding'))
 
-    return ret, tri_msgs  # pytype: disable=bad-return-type  # numpy-scalars
+    return ret, tri_msgs, aux_info  # pytype: disable=bad-return-type  # numpy-scalars
 
 
 class DeepSets(PGN):

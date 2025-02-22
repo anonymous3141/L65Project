@@ -262,7 +262,7 @@ def collect_and_eval(sampler, predict_fn, sample_count, rng_key, extras):
     batch_size = feedback.outputs[0].data.shape[0]
     outputs.append(feedback.outputs)
     new_rng_key, rng_key = jax.random.split(rng_key)
-    cur_preds, _ = predict_fn(new_rng_key, feedback.features)
+    cur_preds, _, aux_info = predict_fn(new_rng_key, feedback.features)
     preds.append(cur_preds)
     processed_samples += batch_size
   outputs = _concat(outputs, axis=0)
@@ -521,7 +521,7 @@ def main(unused_argv):
         # In non-chunked training, all training lengths can be treated equally,
         # since there is no state to maintain between batches.
         length_and_algo_idx = algo_idx
-      cur_loss = train_model.feedback(rng_key, feedback, length_and_algo_idx)
+      cur_loss, aux_info = train_model.feedback(rng_key, feedback, length_and_algo_idx)
       rng_key = new_rng_key
 
       if FLAGS.chunked_training:
@@ -536,6 +536,10 @@ def main(unused_argv):
       wandb_log[f"{FLAGS.algorithms[algo_idx]}_loss"] = cur_loss
       wandb_log['step'] = step 
       wandb_log[f"{FLAGS.algorithms[algo_idx]}_examples_seen"] = current_train_items[algo_idx]
+
+      for (field, data) in aux_info.items():
+        # avg over timestep
+        wandb_log[f"{FLAGS.algorithms[algo_idx]}_{field}"] = data.mean() 
 
     # Periodically evaluate model
     if step >= next_eval:
