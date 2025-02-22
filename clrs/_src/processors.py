@@ -476,21 +476,23 @@ class PGN(Processor):
         tri_msgs = self.activation(tri_msgs)
 
     # (B, N, N, C). A[b][i][j] is the message from node i to node j 
-    msgs = (
+    msgs_premlp = (
         jnp.expand_dims(msg_1, axis=1) + jnp.expand_dims(msg_2, axis=2) +
         msg_e + jnp.expand_dims(msg_g, axis=(1, 2)))
     
-    aux_info.update(get_statistics(msgs,'no_subtraction_msg'))
+    aux_info.update(get_statistics(msgs_premlp,'no_subtraction_premlpmsg'))
 
     if self.differential:
       # subtraction 
       # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
-      msg_kappa = node_fts if self.differential_config.get("kappa") == "identity" else m_kappa(z) 
-      msgs -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
-      aux_info.update(get_statistics(msgs,'post_subtraction_msg'))
+      if self.differential_config.get("kappa") != 'msgdiff':
+          msg_kappa = node_fts if self.differential_config.get("kappa") == "identity" else m_kappa(z) 
+          msgs_premlp -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
+          aux_info.update(get_statistics(msgs_premlp,'post_subtraction_premlpmsg'))
 
     if self._msgs_mlp_sizes is not None:
-      msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs))
+      msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs_premlp))
+    aux_info.update(get_statistics(msgs,'postmlpmsg'))
 
     if self.mid_act is not None:
       msgs = self.mid_act(msgs)
@@ -507,6 +509,21 @@ class PGN(Processor):
       msgs = self.reduction(msgs * jnp.expand_dims(adj_mat, -1), axis=1)
 
     aux_info.update(get_statistics(msgs,'aggregated_msg'))
+
+    if self.differential:
+      # subtraction of another set of aggregated messages from current aggregated message
+      # observe you can put the differential operation anywhere in the computational graph 
+      # (between two sets of previously identically computed, just with different params, messages)
+      # but some places may make more sense than others
+      if self.differential_config.get("kappa") == 'msgdiff':
+          msgs_kappa = m_kappa(jax.nn.relu(msgs_premlp))
+          maxarg_kappa = jnp.where(jnp.expand_dims(adj_mat, -1),
+                         msgs_kappa,
+                         -BIG_NUMBER)
+          msgs_kappa = jnp.max(maxarg_kappa, axis=1) # reduce along axis 1
+          msgs -= msgs_kappa 
+          aux_info.update(get_statistics(msgs,'aggregated_msg_postdiff'))
+
     h_1 = o1(z)
     h_2 = o2(msgs)
 
@@ -960,6 +977,21 @@ def get_processor_factory(kind: str,
           nb_triplet_fts=0,
           differential = True,
           differential_config = {'kappa': 'identity'}
+      )
+
+    elif kind == "differential_mpnn_msgdiff":
+      # Subtract 2 sets of messages (computed using identical methods but different MLPs)
+      # from each other
+
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          reduction=jnp.sum, # use sum upon Petar's suggestion
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True,
+          differential_config = {'kappa': 'msgdiff'}
       )
 
     else:
