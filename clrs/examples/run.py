@@ -553,8 +553,19 @@ def main(unused_argv):
             val_sample_counts[algo_idx],
             new_rng_key,
             extras=common_extras)
+        
+
+        test_stats = collect_and_eval(
+            test_samplers[algo_idx],
+            functools.partial(eval_model.predict, algorithm_index=algo_idx),
+            test_sample_counts[algo_idx],
+            new_rng_key,
+            extras=common_extras)
+        logging.info('(test current model) algo %s : %s', FLAGS.algorithms[algo_idx], test_stats)
         logging.info('(val) algo %s step %d: %s',
                      FLAGS.algorithms[algo_idx], step, val_stats)
+        
+        wandb_log[f"test_score_current_model_{FLAGS.algorithms[algo_idx]}"] = test_stats['score']
         val_scores[algo_idx] = val_stats['score']
 
       next_eval += FLAGS.eval_every
@@ -571,6 +582,7 @@ def main(unused_argv):
       
       for (x, y) in zip(FLAGS.algorithms, val_scores):
         wandb_log[f"val_score_{x}"] = y 
+      
       wandb_log['best_avg_val_score'] = best_score/len(FLAGS.algorithms)
       wandb_log['cur_avg_val_score'] = np.mean(val_scores)
       wandb_log['length_idx'] = length_idx
@@ -606,7 +618,7 @@ def main(unused_argv):
         test_sample_counts[algo_idx],
         new_rng_key,
         extras=common_extras)
-    logging.info('(test) algo %s : %s', FLAGS.algorithms[algo_idx], test_stats)
+    logging.info('(test best model) algo %s : %s', FLAGS.algorithms[algo_idx], test_stats)
     wandb_logger[f"{FLAGS.algorithms[algo_idx]}_test_score"] = test_stats['score']
   wandb.log(wandb_logger)
 
