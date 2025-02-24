@@ -10,7 +10,7 @@ python3 -m clrs.examples.run --processor_type=differential_mpnn2 --algorithms=ac
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=activity_selector --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=activity_selector --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum
 python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=activity_selector --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
-python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=activity_selector --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
+python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=activity_selector --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
 python3 -m clrs.examples.run --processor_type=differential_mpnn_maxmax --algorithms=activity_selector --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 #Insertion-Sort 
 python3 -m clrs.examples.run --processor_type=mpnn --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
@@ -24,7 +24,7 @@ python3 -m clrs.examples.run --processor_type=differential_mpnn2 --algorithms=in
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum
 python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
-python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
+python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
 python3 -m clrs.examples.run --processor_type=differential_mpnn_maxmax --algorithms=insertion_sort --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 END
 # Graham-Scan
@@ -39,7 +39,7 @@ python3 -m clrs.examples.run --processor_type=differential_mpnn2 --algorithms=gr
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=graham_scan --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=graham_scan --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum
 python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=graham_scan --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
-python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=graham_scan --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
+python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=graham_scan --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
 python3 -m clrs.examples.run --processor_type=differential_mpnn_maxmax --algorithms=graham_scan --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 # Jarvis March
 python3 -m clrs.examples.run --processor_type=mpnn --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
@@ -53,5 +53,5 @@ python3 -m clrs.examples.run --processor_type=differential_mpnn2 --algorithms=ja
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
 python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum
 python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
-python3 -m clrs.examples.run --processor_type=differential_mpnn_identity --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
+python3 -m clrs.examples.run --processor_type=differential_mpnn_msgdiff --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=sum 
 python3 -m clrs.examples.run --processor_type=differential_mpnn_maxmax --algorithms=jarvis_march --checkpoint_path=checkpoint/ --hint_teacher_forcing=0. --mpnn_processor_aggregator=max
