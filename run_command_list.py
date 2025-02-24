@@ -1,7 +1,8 @@
 import subprocess
 """
 usage: 
-0) type in all the launch commands you want to do in run_commands.txt
+0) type in all the launch commands you want to do in run_commands.txt 
+    (as you'd usually run them in the terminal)
    feel free to add comments with # at the beginning of the line
    end the list with a line that says "END"
 1) new terminal, run source clrs_env/bin/activate

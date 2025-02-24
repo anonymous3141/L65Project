@@ -485,14 +485,24 @@ class PGN(Processor):
     if self.differential:
       # subtraction 
       # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
-      if self.differential_config.get("kappa") != 'msgdiff':
+      if self.differential_config.get("kappa") not in ['msgdiff', 'maxmax']:
           msg_kappa = node_fts if self.differential_config.get("kappa") == "identity" else m_kappa(z) 
           msgs_premlp -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
-          aux_info.update(get_statistics(msgs_premlp,'post_subtraction_premlpmsg'))
+    
+    # should log regardless if there's subtraction
+    aux_info.update(get_statistics(msgs_premlp,'post_subtraction_premlpmsg'))
 
     if self._msgs_mlp_sizes is not None:
       msgs = hk.nets.MLP(self._msgs_mlp_sizes)(jax.nn.relu(msgs_premlp))
+
     aux_info.update(get_statistics(msgs,'postmlpmsg'))
+
+    if self.differential and self.differential_config.get("kappa") == 'maxmax':
+        assert(self.reduction == jnp.max)
+        msg_kappa = m_kappa(z) 
+        msgs_premlp -= jnp.expand_dims(msg_kappa, axis=2) 
+
+    aux_info.update(get_statistics(msgs,'postmlpmsg_potentially_postsubtracted'))
 
     if self.mid_act is not None:
       msgs = self.mid_act(msgs)
@@ -522,16 +532,18 @@ class PGN(Processor):
                          -BIG_NUMBER)
           msgs_kappa = jnp.max(maxarg_kappa, axis=1) # reduce along axis 1
           msgs -= msgs_kappa 
-          aux_info.update(get_statistics(msgs,'aggregated_msg_postdiff'))
+    
+    aux_info.update(get_statistics(msgs,'aggregated_msg_postdiff'))
 
     h_1 = o1(z)
-    h_2 = o2(msgs)
+    h_2 = o2(msgs) if self.differential_config.get("kappa") != 'maxmax' else msgs
 
-    if self.update is not None and self.update == jnp.maximum:
-      ret = self.update(h_1, h_2)
+    if self.update is not None and self.update == jnp.maximum or self.differential_config.get("kappa") == 'maxmax':
+      ret = jnp.maximum(h_1, h_2)
     else:
       ret = h_1 + h_2
 
+    aux_info.update(get_statistics(ret,'aggregated_msg_combined'))
     if self.activation is not None:
       ret = self.activation(ret)
 
@@ -783,7 +795,8 @@ ProcessorFactory = Callable[[int], Processor]
 def get_processor_factory(kind: str,
                           use_ln: bool,
                           nb_triplet_fts: int,
-                          nb_heads: Optional[int] = None) -> ProcessorFactory:
+                          nb_heads: Optional[int] = None,
+                          mpnn_aggregator: str = 'max') -> ProcessorFactory:
   """Returns a processor factory.
 
   Args:
@@ -795,6 +808,9 @@ def get_processor_factory(kind: str,
     A callable that takes an `out_size` parameter (equal to the hidden
     dimension of the network) and returns a processor instance.
   """
+
+  reduction = {'mean': jnp.mean, 'max': jnp.max, 'sum': jnp.sum}[mpnn_aggregator]
+
   def _factory(out_size: int):
     if kind == 'deepsets':
       processor = DeepSets(
@@ -844,9 +860,11 @@ def get_processor_factory(kind: str,
       processor = MPNN(
           out_size=out_size,
           msgs_mlp_sizes=[out_size, out_size],
+          reduction=reduction,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
+          differential_config = {}
       )
     elif kind == 'pgn':
       processor = PGN(
@@ -947,10 +965,12 @@ def get_processor_factory(kind: str,
       processor = MPNN(
           out_size=out_size,
           msgs_mlp_sizes=[out_size, out_size],
+          reduction=reduction,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
-          differential = True
+          differential = True,
+          differential_config = {}
       )
 
     elif kind == "differential_mpnn2":
@@ -959,6 +979,7 @@ def get_processor_factory(kind: str,
       processor = MPNN(
           out_size=out_size,
           msgs_mlp_sizes=[out_size, out_size],
+          reduction=reduction,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
@@ -971,7 +992,7 @@ def get_processor_factory(kind: str,
       processor = MPNN(
           out_size=out_size,
           msgs_mlp_sizes=[out_size, out_size],
-          reduction=jnp.sum, # use sum upon Petar's suggestion
+          reduction=reduction,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
@@ -986,12 +1007,27 @@ def get_processor_factory(kind: str,
       processor = MPNN(
           out_size=out_size,
           msgs_mlp_sizes=[out_size, out_size],
-          reduction=jnp.sum, # use sum upon Petar's suggestion
+          reduction=reduction,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
           differential = True,
           differential_config = {'kappa': 'msgdiff'}
+      )
+
+    elif kind == "differential_mpnn_maxmax":
+      # Subtract 2 sets of messages (computed using identical methods but different MLPs)
+      # from each other
+
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          reduction=reduction,
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True,
+          differential_config = {'kappa': 'maxmax'}
       )
 
     else:

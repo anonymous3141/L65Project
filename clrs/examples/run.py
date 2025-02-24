@@ -111,8 +111,13 @@ flags.DEFINE_enum('processor_type', 'triplet_gmpnn',
                    'gat', 'gatv2', 'gat_full', 'gatv2_full',
                    'gpgn', 'gpgn_mask', 'gmpnn',
                    'triplet_gpgn', 'triplet_gpgn_mask', 'triplet_gmpnn', 
-                   'differential_mpnn', 'differential_mpnn2', 'differential_mpnn_identity', 'differential_mpnn_msgdiff'],
+                   'differential_mpnn', 'differential_mpnn2', 'differential_mpnn_identity', 'differential_mpnn_msgdiff',
+                   'differential_mpnn_maxmax'],
                   'Processor type to use as the network P.')
+
+flags.DEFINE_enum('mpnn_processor_aggregator', 'max',
+                  ['sum', 'max', 'mean'],
+                  'Specifies Aggregator for mpnn and diff_mpnn')
 
 flags.DEFINE_string('checkpoint_path', '/tmp/CLRS30',
                     'Path in which checkpoints are saved.')
@@ -449,6 +454,7 @@ def main(unused_argv):
       use_ln=FLAGS.use_ln,
       nb_triplet_fts=FLAGS.nb_triplet_fts,
       nb_heads=FLAGS.nb_heads,
+      mpnn_aggregator=FLAGS.mpnn_processor_aggregator
   )
   model_params = dict(
       processor_factory=processor_factory,
