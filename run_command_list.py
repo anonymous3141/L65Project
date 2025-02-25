@@ -11,7 +11,7 @@ usage:
 
 # List of commands to run
 L = open("run_commands.txt","r").readlines()
-L = ["source clrs_env/bin/activate;"+c.replace("\n","") for c in L]
+L = ["export XLA_PYTHON_CLIENT_PREALLOCATE=false; source clrs_env/bin/activate;"+c.replace("\n","") for c in L]
 
 # Run each command in its own subprocess
 processes = []
