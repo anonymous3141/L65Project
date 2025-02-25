@@ -441,7 +441,6 @@ class PGN(Processor):
       **unused_kwargs,
   ) -> _Array:
     """MPNN inference step."""
-    assert(hidden.max() < 1e-9 and hidden.min() > -1e-9)
     b, n, _ = node_fts.shape
     assert edge_fts.shape[:-1] == (b, n, n)
     assert graph_fts.shape[:-1] == (b,)
