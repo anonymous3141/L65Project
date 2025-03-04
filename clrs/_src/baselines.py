@@ -425,16 +425,19 @@ class BaselineModel(model.Model):
           pred=output_preds[truth.name],
           nb_nodes=nb_nodes,
       )
+    aux_info.update({'output_loss': total_loss})
 
     # Optionally accumulate hint losses.
     if self.decode_hints:
       for truth in feedback.features.hints:
-        total_loss += losses.hint_loss(
+        hint_loss = losses.hint_loss(
             truth=truth,
             preds=[x[truth.name] for x in hint_preds],
             lengths=lengths,
             nb_nodes=nb_nodes,
         )
+        aux_info.update({f"loss_truth_{truth.name}": hint_loss})
+        total_loss += hint_loss
 
     return total_loss, aux_info
 
