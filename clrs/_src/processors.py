@@ -486,6 +486,7 @@ class PGN(Processor):
       # we broadcast in dim 2: This corresponds to msg_{uv} - f(h_u) where v is the node to compute msgs for 
       if self.differential_config.get("kappa") not in ['msgdiff', 'maxmax']:
           msg_kappa = hidden if self.differential_config.get("kappa") == "identity" else m_kappa(z) 
+          aux_info.update(get_statistics(msg_kappa,'msg_kappa_subtrahend'))
           msgs_premlp -= jnp.expand_dims(msg_kappa, axis=self.differential_config.get("baseline_broadcast_axis", 2)) 
     
     # should log regardless if there's subtraction
@@ -498,7 +499,8 @@ class PGN(Processor):
 
     if self.differential and self.differential_config.get("kappa") == 'maxmax':
         assert(self.reduction == jnp.max)
-        msg_kappa = m_kappa(z) 
+        msg_kappa = m_kappa(z)
+        aux_info.update(get_statistics(msg_kappa,'msg_kappa_subtrahend'))
         msgs -= jnp.expand_dims(msg_kappa, axis=2) 
 
     aux_info.update(get_statistics(msgs,'postmlpmsg_potentially_postsubtracted'))
