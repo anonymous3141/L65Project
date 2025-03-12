@@ -29,8 +29,9 @@ import jax
 import numpy as np
 import requests
 import tensorflow as tf
-
-
+import hydra
+from omegaconf import DictConfig
+"""
 flags.DEFINE_list('algorithms', ['bfs'], 'Which algorithms to run.')
 flags.DEFINE_list('train_lengths', ['4', '7', '11', '13', '16'],
                   'Which training sizes to use. A size of -1 means '
@@ -125,8 +126,9 @@ flags.DEFINE_string('dataset_path', '/tmp/CLRS30',
                     'Path in which dataset is stored.')
 flags.DEFINE_boolean('freeze_processor', False,
                      'Whether to freeze the processor of the model.')
-
 FLAGS = flags.FLAGS
+"""
+FLAGS = None
 
 
 PRED_AS_INPUT_ALGOS = [
@@ -410,18 +412,24 @@ def create_samplers(
           test_samplers, test_sample_counts,
           spec_list)
 
-def get_wandb_name():
+def get_wandb_name(cfg):
   import time
   s=time.gmtime(time.time())
-  return f"{time.strftime('%Y-%m-%d %H:%M:%S', s)}-{FLAGS['algorithms'].value}-{FLAGS['processor_type'].value}"
-def main(unused_argv):
+  return f"{time.strftime('%Y-%m-%d %H:%M:%S', s)}-{cfg['algorithms']}-{cfg['processor_type']}"
+
+@hydra.main(config_path=".", config_name="config", version_base=None)
+def main(cfg):
+  global FLAGS
+  FLAGS = cfg 
+  print(FLAGS)
   run = wandb.init(
     project = "L65-project",
-    config = {name: FLAGS[name].value for name in FLAGS},
-    name = get_wandb_name()               
+    config = {name: FLAGS[name] for name in FLAGS},
+    name = get_wandb_name(cfg)               
   )
 
-  FLAGS.checkpoint_path = os.path.join(FLAGS.checkpoint_path,get_wandb_name())
+  FLAGS.checkpoint_path = os.path.join(FLAGS.checkpoint_path,get_wandb_name(cfg))
+
   if FLAGS.hint_mode == 'encoded_decoded':
     encode_hints = True
     decode_hints = True
@@ -649,4 +657,5 @@ def main(unused_argv):
   run.finish()
 
 if __name__ == '__main__':
-  app.run(main)
+  #app.run(main)
+  main()

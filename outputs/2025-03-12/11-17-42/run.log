@@ -1,0 +1,3 @@
+[2025-03-12 11:17:44,072][jax._src.xla_bridge][INFO] - Unable to initialize backend 'rocm': module 'jaxlib.xla_extension' has no attribute 'GpuAllocatorConfig'
+[2025-03-12 11:17:44,074][jax._src.xla_bridge][INFO] - Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: libtpu.so: cannot open shared object file: No such file or directory
+[2025-03-12 11:17:44,511][absl][INFO] - Creating samplers for algo b

@@ -1,0 +1,76 @@
+[2025-03-12 11:29:42,412][jax._src.xla_bridge][INFO] - Unable to initialize backend 'rocm': module 'jaxlib.xla_extension' has no attribute 'GpuAllocatorConfig'
+[2025-03-12 11:29:42,413][jax._src.xla_bridge][INFO] - Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: libtpu.so: cannot open shared object file: No such file or directory
+[2025-03-12 11:29:42,851][absl][INFO] - Creating samplers for algo graham_scan
+[2025-03-12 11:29:42,852][absl][WARNING] - Ignoring kwargs {'length_needle', 'p'} when building sampler class <class 'clrs._src.samplers.ConvexHullSampler'>
+[2025-03-12 11:29:42,852][absl][WARNING] - Sampling dataset on-the-fly, unlimited samples.
+[2025-03-12 11:29:43,364][absl][WARNING] - Ignoring kwargs {'length_needle', 'p'} when building sampler class <class 'clrs._src.samplers.ConvexHullSampler'>
+[2025-03-12 11:29:44,497][absl][WARNING] - Ignoring kwargs {'length_needle', 'p'} when building sampler class <class 'clrs._src.samplers.ConvexHullSampler'>
+[2025-03-12 11:29:48,253][absl][WARNING] - Ignoring kwargs {'length_needle', 'p'} when building sampler class <class 'clrs._src.samplers.ConvexHullSampler'>
+[2025-03-12 11:29:54,519][absl][WARNING] - Ignoring kwargs {'length_needle', 'p'} when building sampler class <class 'clrs._src.samplers.ConvexHullSampler'>
+[2025-03-12 11:30:06,042][absl][WARNING] - Ignoring kwargs {'length_needle', 'p'} when building sampler class <class 'clrs._src.samplers.ConvexHullSampler'>
+[2025-03-12 11:30:06,043][absl][INFO] - Creating a dataset with 64 samples.
+[2025-03-12 11:30:06,807][absl][INFO] - Dataset found at /tmp/CLRS30/CLRS30_v1.0.0. Skipping download.
+[2025-03-12 11:30:06,811][absl][INFO] - Load dataset info from /tmp/CLRS30/CLRS30_v1.0.0/clrs_dataset/graham_scan_test/1.0.0
+[2025-03-12 11:30:06,829][absl][INFO] - Load dataset info from /tmp/CLRS30/CLRS30_v1.0.0/clrs_dataset/graham_scan_test/1.0.0
+[2025-03-12 11:30:06,859][absl][INFO] - Creating a tf.data.Dataset reading 1 files located in folders: /tmp/CLRS30/CLRS30_v1.0.0/clrs_dataset/graham_scan_test/1.0.0.
+[2025-03-12 11:30:07,047][absl][INFO] - Constructing tf.data.Dataset clrs_dataset for split test, from /tmp/CLRS30/CLRS30_v1.0.0/clrs_dataset/graham_scan_test/1.0.0
+[2025-03-12 11:31:04,556][absl][INFO] - Algo graham_scan step 0 current loss 11.474818, current_train_items 32.
+[2025-03-12 11:31:36,461][absl][INFO] - (test current model) algo graham_scan : {'in_hull': 0.3005630142919013, 'score': 0.3005630142919013, 'examples_seen': 32, 'step': 0, 'algorithm': 'graham_scan'}
+[2025-03-12 11:31:36,462][absl][INFO] - (val) algo graham_scan step 0: {'in_hull': 0.6199460916442048, 'score': 0.6199460916442048, 'examples_seen': 32, 'step': 0, 'algorithm': 'graham_scan'}
+[2025-03-12 11:31:37,887][absl][INFO] - Checkpointing best model, best avg val score was -1.000, current avg val score is 0.620, val scores are: graham_scan: 0.620
+[2025-03-12 11:32:33,125][absl][INFO] - Algo graham_scan step 1 current loss 12.361233, current_train_items 64.
+[2025-03-12 11:33:20,301][absl][INFO] - Algo graham_scan step 2 current loss 12.712576, current_train_items 96.
+[2025-03-12 11:34:09,584][absl][INFO] - Algo graham_scan step 3 current loss 11.996718, current_train_items 128.
+[2025-03-12 11:34:54,822][absl][INFO] - Algo graham_scan step 4 current loss 11.558369, current_train_items 160.
+[2025-03-12 11:34:55,087][absl][INFO] - Algo graham_scan step 5 current loss 8.027386, current_train_items 192.
+[2025-03-12 11:34:55,144][absl][INFO] - Algo graham_scan step 6 current loss 8.765239, current_train_items 224.
+[2025-03-12 11:34:55,278][absl][INFO] - Algo graham_scan step 7 current loss 9.642003, current_train_items 256.
+[2025-03-12 11:34:55,507][absl][INFO] - Algo graham_scan step 8 current loss 9.603893, current_train_items 288.
+[2025-03-12 11:34:55,880][absl][INFO] - Algo graham_scan step 9 current loss 10.121847, current_train_items 320.
+[2025-03-12 11:34:56,140][absl][INFO] - Algo graham_scan step 10 current loss 7.333378, current_train_items 352.
+[2025-03-12 11:34:56,196][absl][INFO] - Algo graham_scan step 11 current loss 7.967478, current_train_items 384.
+[2025-03-12 11:34:56,365][absl][INFO] - Algo graham_scan step 12 current loss 8.395679, current_train_items 416.
+[2025-03-12 11:34:56,663][absl][INFO] - Algo graham_scan step 13 current loss 8.735348, current_train_items 448.
+[2025-03-12 11:34:57,167][absl][INFO] - Algo graham_scan step 14 current loss 9.051292, current_train_items 480.
+[2025-03-12 11:34:57,442][absl][INFO] - Algo graham_scan step 15 current loss 6.816319, current_train_items 512.
+[2025-03-12 11:34:57,507][absl][INFO] - Algo graham_scan step 16 current loss 6.862377, current_train_items 544.
+[2025-03-12 11:34:57,680][absl][INFO] - Algo graham_scan step 17 current loss 7.774198, current_train_items 576.
+[2025-03-12 11:34:57,973][absl][INFO] - Algo graham_scan step 18 current loss 8.019145, current_train_items 608.
+[2025-03-12 11:34:58,471][absl][INFO] - Algo graham_scan step 19 current loss 8.669528, current_train_items 640.
+[2025-03-12 11:34:58,742][absl][INFO] - Algo graham_scan step 20 current loss 5.659343, current_train_items 672.
+[2025-03-12 11:34:58,807][absl][INFO] - Algo graham_scan step 21 current loss 6.674750, current_train_items 704.
+[2025-03-12 11:34:58,976][absl][INFO] - Algo graham_scan step 22 current loss 7.291475, current_train_items 736.
+[2025-03-12 11:34:59,273][absl][INFO] - Algo graham_scan step 23 current loss 7.325345, current_train_items 768.
+[2025-03-12 11:34:59,767][absl][INFO] - Algo graham_scan step 24 current loss 8.010149, current_train_items 800.
+[2025-03-12 11:35:00,031][absl][INFO] - Algo graham_scan step 25 current loss 5.154816, current_train_items 832.
+[2025-03-12 11:35:00,097][absl][INFO] - Algo graham_scan step 26 current loss 6.074876, current_train_items 864.
+[2025-03-12 11:35:00,278][absl][INFO] - Algo graham_scan step 27 current loss 6.659293, current_train_items 896.
+[2025-03-12 11:35:00,568][absl][INFO] - Algo graham_scan step 28 current loss 7.177315, current_train_items 928.
+[2025-03-12 11:35:01,059][absl][INFO] - Algo graham_scan step 29 current loss 7.653993, current_train_items 960.
+[2025-03-12 11:35:01,324][absl][INFO] - Algo graham_scan step 30 current loss 4.789461, current_train_items 992.
+[2025-03-12 11:35:01,390][absl][INFO] - Algo graham_scan step 31 current loss 5.654418, current_train_items 1024.
+[2025-03-12 11:35:01,559][absl][INFO] - Algo graham_scan step 32 current loss 6.455601, current_train_items 1056.
+[2025-03-12 11:35:01,859][absl][INFO] - Algo graham_scan step 33 current loss 6.910824, current_train_items 1088.
+[2025-03-12 11:35:02,345][absl][INFO] - Algo graham_scan step 34 current loss 7.524191, current_train_items 1120.
+[2025-03-12 11:35:02,618][absl][INFO] - Algo graham_scan step 35 current loss 4.600745, current_train_items 1152.
+[2025-03-12 11:35:02,686][absl][INFO] - Algo graham_scan step 36 current loss 5.463980, current_train_items 1184.
+[2025-03-12 11:35:02,855][absl][INFO] - Algo graham_scan step 37 current loss 6.590464, current_train_items 1216.
+[2025-03-12 11:35:03,152][absl][INFO] - Algo graham_scan step 38 current loss 6.698972, current_train_items 1248.
+[2025-03-12 11:35:03,641][absl][INFO] - Algo graham_scan step 39 current loss 7.246665, current_train_items 1280.
+[2025-03-12 11:35:03,910][absl][INFO] - Algo graham_scan step 40 current loss 4.263201, current_train_items 1312.
+[2025-03-12 11:35:03,976][absl][INFO] - Algo graham_scan step 41 current loss 5.693105, current_train_items 1344.
+[2025-03-12 11:35:04,147][absl][INFO] - Algo graham_scan step 42 current loss 6.760679, current_train_items 1376.
+[2025-03-12 11:35:04,446][absl][INFO] - Algo graham_scan step 43 current loss 7.222209, current_train_items 1408.
+[2025-03-12 11:35:04,947][absl][INFO] - Algo graham_scan step 44 current loss 7.662920, current_train_items 1440.
+[2025-03-12 11:35:05,255][absl][INFO] - Algo graham_scan step 45 current loss 4.217553, current_train_items 1472.
+[2025-03-12 11:35:05,321][absl][INFO] - Algo graham_scan step 46 current loss 5.428090, current_train_items 1504.
+[2025-03-12 11:35:05,486][absl][INFO] - Algo graham_scan step 47 current loss 6.329878, current_train_items 1536.
+[2025-03-12 11:35:05,790][absl][INFO] - Algo graham_scan step 48 current loss 6.891120, current_train_items 1568.
+[2025-03-12 11:35:06,283][absl][INFO] - Algo graham_scan step 49 current loss 7.684003, current_train_items 1600.
+[2025-03-12 11:35:06,597][absl][INFO] - Algo graham_scan step 50 current loss 3.657276, current_train_items 1632.
+[2025-03-12 11:35:11,227][absl][INFO] - (test current model) algo graham_scan : {'in_hull': 0.7082767978290366, 'score': 0.7082767978290366, 'examples_seen': 1632, 'step': 50, 'algorithm': 'graham_scan'}
+[2025-03-12 11:35:11,228][absl][INFO] - (val) algo graham_scan step 50: {'in_hull': 0.8551020408163265, 'score': 0.8551020408163265, 'examples_seen': 1632, 'step': 50, 'algorithm': 'graham_scan'}
+[2025-03-12 11:35:11,669][absl][INFO] - Checkpointing best model, best avg val score was 0.620, current avg val score is 0.855, val scores are: graham_scan: 0.855
+[2025-03-12 11:35:11,783][absl][INFO] - Algo graham_scan step 51 current loss 4.996645, current_train_items 1664.
+[2025-03-12 11:35:11,960][absl][INFO] - Algo graham_scan step 52 current loss 6.236629, current_train_items 1696.
+[2025-03-12 11:35:12,287][absl][INFO] - Algo graham_scan step 53 current loss 6.450232, current_train_items 1728.
