@@ -120,6 +120,10 @@ def construct_diff_decoders(name: str):
 
   return decoders
 
+def entropy_from_softmax_logits(logits):
+  logZ = jax.scipy.special.logsumexp(logits, axis=-1)
+  ps = jax.scipy.special.softmax(logits, axis=-1)
+  return logZ.mean() - (ps * logits).sum(axis=-1).mean()
 
 def postprocess(spec: _Spec, preds: Dict[str, _Array],
                 sinkhorn_temperature: float,
@@ -151,6 +155,8 @@ def postprocess(spec: _Spec, preds: Dict[str, _Array],
     pre-processed before feeding them back in.
   """
   result = {}
+  aux_info = {}
+
   for name in preds.keys():
     _, loc, t = spec[name]
     new_t = t
@@ -159,18 +165,23 @@ def postprocess(spec: _Spec, preds: Dict[str, _Array],
       if hard:
         data = jax.lax.stop_gradient(data)
     elif t == _Type.MASK:
+      aux_info[f"{name}_entropy"] = entropy_from_softmax_logits(jnp.concatenate([data, jnp.zeros(data.shape[:-1]+(1,))], axis=-1))
       if hard:
         data = (data > 0.0) * 1.0
       else:
         data = jax.nn.sigmoid(data)
+      
     elif t in [_Type.MASK_ONE, _Type.CATEGORICAL]:
       cat_size = data.shape[-1]
+      aux_info[f"{name}_entropy"] = entropy_from_softmax_logits(data)
       if hard:
         best = jnp.argmax(data, -1)
         data = hk.one_hot(best, cat_size)
       else:
         data = jax.nn.softmax(data, axis=-1)
+      
     elif t == _Type.POINTER:
+      aux_info[f"{name}_entropy"] = entropy_from_softmax_logits(data)
       if hard:
         data = jnp.argmax(data, -1).astype(float)
       else:
@@ -178,6 +189,7 @@ def postprocess(spec: _Spec, preds: Dict[str, _Array],
         new_t = _Type.SOFT_POINTER
     elif t == _Type.PERMUTATION_POINTER:
       # Convert the matrix of logits to a doubly stochastic matrix.
+      aux_info[f"{name}_entropy"] = entropy_from_softmax_logits(data) # for the lack of better calculation
       data = log_sinkhorn(
           x=data,
           steps=sinkhorn_steps,
@@ -192,7 +204,7 @@ def postprocess(spec: _Spec, preds: Dict[str, _Array],
     result[name] = probing.DataPoint(
         name=name, location=loc, type_=new_t, data=data)
 
-  return result
+  return result, aux_info
 
 
 def decode_fts(

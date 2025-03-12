@@ -337,7 +337,7 @@ class BaselineModel(model.Model):
       outs, hint_preds, hidden_states = net_outputs
     else:
       outs, hint_preds, aux_info = net_outputs
-    outs = decoders.postprocess(self._spec[algorithm_index],
+    outs, aux_postprocessor_info = decoders.postprocess(self._spec[algorithm_index],
                                 outs,
                                 sinkhorn_temperature=0.1,
                                 sinkhorn_steps=50,

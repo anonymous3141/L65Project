@@ -1,4 +1,7 @@
 import subprocess
+import os
+import signal
+import sys
 """
 usage: 
 0) type in all the launch commands you want to do in run_commands.txt 
@@ -10,19 +13,46 @@ usage:
 """
 
 # List of commands to run
-L = open("run_commands.txt","r").readlines()
-L = ["export XLA_PYTHON_CLIENT_PREALLOCATE=false; source clrs_env/bin/activate;"+c.replace("\n","") for c in L]
+L = open("run_commands_list_junhua.txt","r").readlines()
+L = ["export XLA_PYTHON_CLIENT_PREALLOCATE=false; bash -c 'source clrs_env/bin/activate;"+c.replace("\n","") + "' " for c in L]
 
-# Run each command in its own subprocess
+# Store running processes
 processes = []
-for cmd in L:
-    if "#" in cmd:
-        continue 
-    if "END" in cmd:
-        break
-    process = subprocess.Popen(cmd, shell=True)
-    processes.append(process)
 
-# Wait for all subprocesses to complete
-for process in processes:
-    process.communicate()
+def terminate_processes():
+    """ Send SIGTERM to all running subprocesses """
+    print("\nTerminating all subprocesses...")
+    for process in processes:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # Graceful termination
+        except ProcessLookupError:
+            pass  # Process already terminated
+
+# Handle Ctrl+C
+def signal_handler(sig, frame):
+    print("\nCtrl+C detected! Stopping all subprocesses...")
+    terminate_processes()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+try:
+    for cmd in L:
+        if "#" in cmd:
+            continue 
+        if "END" in cmd:
+            break
+
+        # Launch each command in its own process group
+        process = subprocess.Popen(cmd, shell=True)        
+        processes.append(process)
+
+    # Wait for all subprocesses
+    for process in processes:
+        process.communicate()
+
+except KeyboardInterrupt:
+    signal_handler(None, None)  # Handle Ctrl+C properly
+
+finally:
+    terminate_processes()  # Ensure cleanup

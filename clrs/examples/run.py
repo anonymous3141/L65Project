@@ -56,7 +56,7 @@ flags.DEFINE_boolean('chunked_training', False,
 flags.DEFINE_integer('chunk_length', 16,
                      'Time chunk length used for training (if '
                      '`chunked_training` is True.')
-flags.DEFINE_integer('train_steps', 10000, 'Number of training iterations.')
+flags.DEFINE_integer('train_steps', 100000, 'Number of training iterations.')
 flags.DEFINE_integer('eval_every', 50, 'Evaluation frequency (in steps).')
 flags.DEFINE_integer('test_every', 500, 'Evaluation frequency (in steps).')
 
@@ -112,7 +112,7 @@ flags.DEFINE_enum('processor_type', 'triplet_gmpnn',
                    'gpgn', 'gpgn_mask', 'gmpnn',
                    'triplet_gpgn', 'triplet_gpgn_mask', 'triplet_gmpnn', 
                    'differential_mpnn', 'differential_mpnn2', 'differential_mpnn_identity', 'differential_mpnn_msgdiff',
-                   'differential_mpnn_maxmax'],
+                   'differential_mpnn_maxmax', 'differential_mpnn_maxmax-ablate_subtract', 'differential_mpnn_maxmax-ablate_outer'],
                   'Processor type to use as the network P.')
 
 flags.DEFINE_enum('mpnn_processor_aggregator', 'max',
@@ -275,9 +275,16 @@ def collect_and_eval(sampler, predict_fn, sample_count, rng_key, extras):
   out = clrs.evaluate(outputs, preds)
   if extras:
     out.update(extras)
-  return {k: unpack(v) for k, v in out.items()}
+  return {k: unpack(v) for k, v in out.items()}, aux_info
 
-
+def model_weight_norms(params):
+  norm_sq_sum = 0
+  size_sum = 0
+  for tensor in jax.tree_util.tree_leaves(params):
+    norm_sq_sum += jax.numpy.linalg.norm(tensor)**2
+    size_sum += tensor.size
+  return jax.numpy.sqrt(norm_sq_sum/size_sum)
+  
 def create_samplers(
     rng,
     train_lengths: List[int],
@@ -557,7 +564,7 @@ def main(unused_argv):
 
         # Validation info.
         new_rng_key, rng_key = jax.random.split(rng_key)
-        val_stats = collect_and_eval(
+        val_stats, aux_val_info = collect_and_eval(
             val_samplers[algo_idx],
             functools.partial(eval_model.predict, algorithm_index=algo_idx),
             val_sample_counts[algo_idx],
@@ -565,7 +572,7 @@ def main(unused_argv):
             extras=common_extras)
         
 
-        test_stats = collect_and_eval(
+        test_stats, aux_test_info = collect_and_eval(
             test_samplers[algo_idx],
             functools.partial(eval_model.predict, algorithm_index=algo_idx),
             test_sample_counts[algo_idx],
@@ -577,6 +584,12 @@ def main(unused_argv):
         
         wandb_log[f"test_score_current_model_{FLAGS.algorithms[algo_idx]}"] = test_stats['score']
         val_scores[algo_idx] = val_stats['score']
+
+        for (key, value) in aux_val_info.items():
+          wandb_log[f"{FLAGS.algorithms[algo_idx]}_val_{key}"] = value.mean()
+
+        for (key, value) in aux_test_info.items():
+          wandb_log[f"{FLAGS.algorithms[algo_idx]}_test_{key}"] = value.mean()
 
       next_eval += FLAGS.eval_every
 
@@ -596,7 +609,7 @@ def main(unused_argv):
       wandb_log['best_avg_val_score'] = best_score/len(FLAGS.algorithms)
       wandb_log['cur_avg_val_score'] = np.mean(val_scores)
       wandb_log['length_idx'] = length_idx
-
+      wandb_log['model_weights_norm'] = model_weight_norms(train_model.params)
       if (sum(val_scores) > best_score) or step == 0:
         best_score = sum(val_scores)
         logging.info('Checkpointing best model, %s', msg)
@@ -622,7 +635,7 @@ def main(unused_argv):
                      'algorithm': FLAGS.algorithms[algo_idx]}
 
     new_rng_key, rng_key = jax.random.split(rng_key)
-    test_stats = collect_and_eval(
+    test_stats, final_test_aux_info = collect_and_eval(
         test_samplers[algo_idx],
         functools.partial(eval_model.predict, algorithm_index=algo_idx),
         test_sample_counts[algo_idx],

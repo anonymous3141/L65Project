@@ -497,7 +497,7 @@ class PGN(Processor):
 
     aux_info.update(get_statistics(msgs,'postmlpmsg'))
 
-    if self.differential and self.differential_config.get("kappa") == 'maxmax':
+    if self.differential and self.differential_config.get("kappa") == 'maxmax' and (not self.differential_config.get("maxmax-ablate-subtract", False)):
         assert(self.reduction == jnp.max)
         msg_kappa = m_kappa(z)
         aux_info.update(get_statistics(msg_kappa,'msg_kappa_subtrahend'))
@@ -537,9 +537,9 @@ class PGN(Processor):
     aux_info.update(get_statistics(msgs,'aggregated_msg_postdiff'))
 
     h_1 = o1(z)
-    h_2 = o2(msgs) if self.differential_config.get("kappa") != 'maxmax' else msgs
+    h_2 = o2(msgs) if (self.differential_config.get("kappa") != 'maxmax' or self.differential_config.get("maxmax-ablate-outer", False)) else msgs
 
-    if self.update is not None and self.update == jnp.maximum or self.differential_config.get("kappa") == 'maxmax':
+    if self.update is not None and self.update == jnp.maximum or (self.differential_config.get("kappa") == 'maxmax' and (not self.differential_config.get("maxmax-ablate-outer", False))):
       ret = jnp.maximum(h_1, h_2)
     else:
       ret = h_1 + h_2
@@ -1029,6 +1029,33 @@ def get_processor_factory(kind: str,
           nb_triplet_fts=0,
           differential = True,
           differential_config = {'kappa': 'maxmax'}
+      )
+    elif kind == "differential_mpnn_maxmax-ablate_subtract":
+      # maxmax architecture but without the inner subtraction
+
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          reduction=reduction,
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True,
+          differential_config = {'kappa': 'maxmax', "maxmax-ablate-subtract": True}
+      )
+    
+    elif kind == "differential_mpnn_maxmax-ablate_outer":
+      # maxmax architecture but with outer max replaced by linear + sum
+
+      processor = MPNN(
+          out_size=out_size,
+          msgs_mlp_sizes=[out_size, out_size],
+          reduction=reduction,
+          use_ln=use_ln,
+          use_triplets=False,
+          nb_triplet_fts=0,
+          differential = True,
+          differential_config = {'kappa': 'maxmax', "maxmax-ablate-outer": True}
       )
 
     else:

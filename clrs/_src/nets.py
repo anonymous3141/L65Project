@@ -121,11 +121,13 @@ class Net(hk.Module):
                         return_hints: bool,
                         return_all_outputs: bool
                         ):
+    
+    aux_info, decoder_aux_info = None, {}
     if self.decode_hints and not first_step:
       assert self._hint_repred_mode in ['soft', 'hard', 'hard_on_eval']
       hard_postprocess = (self._hint_repred_mode == 'hard' or
                           (self._hint_repred_mode == 'hard_on_eval' and repred))
-      decoded_hint = decoders.postprocess(spec,
+      decoded_hint, decoder_aux_info = decoders.postprocess(spec,
                                           mp_state.hint_preds,
                                           sinkhorn_temperature=0.1,
                                           sinkhorn_steps=25,
@@ -169,6 +171,7 @@ class Net(hk.Module):
         batch_size, nb_nodes, mp_state.lstm_state,
         spec, encs, decs, repred)
 
+    #aux_info.update(decoder_aux_info)
     if first_step:
       output_preds = output_preds_cand
     else:
@@ -192,7 +195,7 @@ class Net(hk.Module):
 
     # Complying to jax.scan, the first returned value is the state we carry over
     # the second value is the output that will be stacked over steps.
-    return new_mp_state, (accum_mp_state, aux_info)
+    return new_mp_state, (accum_mp_state, aux_info, decoder_aux_info)
 
   def __call__(self, features_list: List[_Features], repred: bool,
                algorithm_index: int,
@@ -282,7 +285,7 @@ class Net(hk.Module):
           return_hints=return_hints,
           return_all_outputs=return_all_outputs,
           )
-      mp_state, (lean_mp_state, aux_info) = self._msg_passing_step(
+      mp_state, (lean_mp_state, aux_info, _) = self._msg_passing_step(
           mp_state,
           i=0,
           first_step=True,
@@ -295,7 +298,7 @@ class Net(hk.Module):
           **common_args)
 
       # JC: I'm assuming this rolls out the algorithm
-      output_mp_state, (accum_mp_state, stacked_aux_info) = hk.scan(
+      output_mp_state, (accum_mp_state, stacked_aux_info, stacked_decoder_aux_info) = hk.scan(
           scan_fn,
           mp_state,
           jnp.arange(nb_mp_steps - 1) + 1,
@@ -325,8 +328,9 @@ class Net(hk.Module):
       hiddens = jnp.stack([v for v in accum_mp_state.hiddens])
       return output_preds, hint_preds, hiddens
 
-    # 
-    return output_preds, hint_preds, jax.tree_map(lambda x, y: jnp.concatenate([jnp.array([x]), y]), aux_info, stacked_aux_info)
+    all_aux_info = jax.tree_map(lambda x, y: jnp.concatenate([jnp.array([x]), y]), aux_info, stacked_aux_info)
+    all_aux_info.update(stacked_decoder_aux_info)
+    return output_preds, hint_preds, all_aux_info
 
   def _construct_encoders_decoders(self):
     """Constructs encoders and decoders, separate for each algorithm."""
@@ -523,7 +527,7 @@ class NetChunked(Net):
         hard_postprocess = (
             self._hint_repred_mode == 'hard' or
             (self._hint_repred_mode == 'hard_on_eval' and repred))
-        decoded_hints = decoders.postprocess(spec,
+        decoded_hints, decoder_aux_info = decoders.postprocess(spec,
                                              prev_hint_preds,
                                              sinkhorn_temperature=0.1,
                                              sinkhorn_steps=25,
