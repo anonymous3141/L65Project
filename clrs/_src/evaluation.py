@@ -15,7 +15,7 @@
 
 """Model base classes and utilities."""
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 import chex
 from clrs._src import probing
 from clrs._src import specs
@@ -108,7 +108,7 @@ def evaluate_hints(
   hint_preds = [_reduce_permutations_dict(h) for h in hint_preds]
   for truth in hints:
     assert truth.name in hint_preds[0]
-    eval_along_time = [_evaluate(truth, p[truth.name],
+    eval_along_time, _ = [_evaluate(truth, p[truth.name],
                                  idx=i+1, lengths=lengths)
                        for (i, p) in enumerate(hint_preds)]
     evals[truth.name] = np.sum(
@@ -125,21 +125,23 @@ def evaluate_hints(
 def evaluate(
     outputs: Tuple[probing.DataPoint, ...],
     predictions: Result,
-) -> Dict[str, float]:
+) -> Tuple[Dict[str, float], List[Dict[str, Union[np.ndarray, str]]]]:
   """Evaluate output predictions."""
   evals = {}
   outputs = _reduce_permutations_tuple(outputs)
   predictions = _reduce_permutations_dict(predictions)
+  debug_infos = []
   for truth in outputs:
     assert truth.name in predictions
     pred = predictions[truth.name]
-    evals[truth.name] = _evaluate(truth, pred)
+    evals[truth.name], debug_info = _evaluate(truth, pred)
+    debug_infos.append(debug_info)
   # Return a single scalar score that is the mean of all output scores.
   evals['score'] = sum([v.item() for v in evals.values()]) / len(evals)
-  return evals
+  return evals, debug_infos
 
 
-def _evaluate(truth, pred, idx=None, lengths=None):
+def _evaluate(truth, pred, idx=None, lengths=None) -> Dict[str, Union[np.ndarray, str]]:
   """Evaluate single prediction of hint or output."""
   assert pred.name == truth.name
   assert pred.location == truth.location
@@ -154,7 +156,16 @@ def _evaluate(truth, pred, idx=None, lengths=None):
       return 0.
     truth_data = truth_data[idx][idx < lengths]
     pred_data = pred_data[idx < lengths]
-  return _EVAL_FN[truth.type_](pred_data, truth_data)
+  
+  result = _EVAL_FN[truth.type_](pred_data, truth_data)
+
+  debug_info = {
+    "truth name": truth.name,
+    "truth data": truth_data,
+    "pred data": pred_data,
+  }
+  
+  return result, debug_info
 
 
 def _eval_one(pred, truth):

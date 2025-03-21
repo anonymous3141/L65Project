@@ -23,3 +23,7 @@ clrs_env/
 checkpoint/
 run_commands.txt
 wandb/
+
+# Hydra
+multirun/
+outputs/

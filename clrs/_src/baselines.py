@@ -493,6 +493,8 @@ class BaselineModel(model.Model):
         restored_params = _filter_in_processor(restored_state['params'])
       else:
         restored_params = restored_state['params']
+      if self.params is None:
+        self.params = {}
       self.params = hk.data_structures.merge(self.params, restored_params)
       self.opt_state = restored_state['opt_state']
 
