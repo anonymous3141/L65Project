@@ -186,6 +186,7 @@ def collect_and_eval(sampler, predict_fn, sample_count, rng_key, extras):
         processed_samples += batch_size
     outputs = _concat(outputs, axis=0)
     preds = _concat(preds, axis=0)
+    logging.info(f"Outputs length: {len(outputs)}")
     out, debug_infos = clrs.evaluate(outputs, preds)
     log_debug_infos(debug_infos)
     if extras:
@@ -297,7 +298,7 @@ def create_samplers(
                 sampler_kwargs=sampler_kwargs,
                 **common_sampler_args,
             )
-            train_sampler, _, spec = make_multi_sampler(**train_args)
+            #train_sampler, _, spec = make_multi_sampler(**train_args)
 
             mult = clrs.CLRS_30_ALGS_SETTINGS[algorithm]["num_samples_multiplier"]
             val_args = dict(
@@ -310,7 +311,7 @@ def create_samplers(
                 sampler_kwargs=sampler_kwargs,
                 **common_sampler_args,
             )
-            val_sampler, val_samples, spec = make_multi_sampler(**val_args)
+            #val_sampler, val_samples, spec = make_multi_sampler(**val_args)
 
             test_args = dict(
                 sizes=test_lengths or [-1],
@@ -325,9 +326,9 @@ def create_samplers(
             test_sampler, test_samples, spec = make_multi_sampler(**test_args)
 
         spec_list.append(spec)
-        train_samplers.append(train_sampler)
-        val_samplers.append(val_sampler)
-        val_sample_counts.append(val_samples)
+        #train_samplers.append(train_sampler)
+        #val_samplers.append(val_sampler)
+        #val_sample_counts.append(val_samples)
         test_samplers.append(test_sampler)
         test_sample_counts.append(test_samples)
 
@@ -347,21 +348,25 @@ def evaluate_saved_model(cfg):
     FLAGS = cfg
     print(FLAGS)
 
-    if FLAGS.processor_type == "differential_mpnn_maxmax":
-        checkpoint_dir = (
+    checkpoint_dirs = []
+    if "differential_mpnn_maxmax" in FLAGS.processor_type:
+        checkpoint_dirs.append(
             "2025-03-17 22:17:26-['insertion_sort']-differential_mpnn_maxmax"
         )
-    elif FLAGS.processor_type == "mpnn":
-        checkpoint_dir = "2025-03-18 09:01:59-['insertion_sort']-mpnn"
-    else:
+    if "mpnn" in FLAGS.processor_type:
+        checkpoint_dirs.append("2025-03-18 09:01:59-['insertion_sort']-mpnn")
+    
+    if len(checkpoint_dirs) == 0:
         raise ValueError("Processor type not in {differential_mpnn_maxmax, mpnn}.")
 
-    model_path = os.path.join(
-        os.path.join(FLAGS.checkpoint_path, checkpoint_dir), "best.pkl"
-    )
+    model_paths = [
+        os.path.join(os.path.join(FLAGS.checkpoint_path, checkpoint_dir), "best.pkl")
+        for checkpoint_dir in checkpoint_dirs
+    ]
 
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found at {model_path}")
+    for model_path in model_paths:
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found at {model_path}")
 
     if FLAGS.hint_mode == "encoded_decoded":
         encode_hints = True
@@ -427,22 +432,25 @@ def evaluate_saved_model(cfg):
         **model_params,
     )
 
-    eval_model.restore_model(model_path, only_load_processor=False)
-
     for algo_idx in range(len(test_samplers)):
         common_extras = {"algorithm": FLAGS.algorithms[algo_idx]}
 
         new_rng_key, rng_key = jax.random.split(rng_key)
-        test_stats, final_test_aux_info = collect_and_eval(
-            test_samplers[algo_idx],
-            functools.partial(eval_model.predict, algorithm_index=algo_idx),
-            test_sample_counts[algo_idx],
-            new_rng_key,
-            extras=common_extras,
-        )
-        logging.info(
-            "(test saved model) algo %s : %s", FLAGS.algorithms[algo_idx], test_stats
-        )
+        
+        for model_path in model_paths:
+
+            eval_model.restore_model(model_path, only_load_processor=False)
+
+            test_stats, final_test_aux_info = collect_and_eval(
+                test_samplers[algo_idx],
+                functools.partial(eval_model.predict, algorithm_index=algo_idx, return_hints=True),
+                test_sample_counts[algo_idx],
+                new_rng_key,
+                extras=common_extras,
+            )
+            logging.info(
+                "(test model %s) algo %s : %s", model_path, FLAGS.algorithms[algo_idx], test_stats
+            )
 
 
 if __name__ == "__main__":
