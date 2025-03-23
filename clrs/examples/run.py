@@ -264,12 +264,14 @@ def collect_and_eval(sampler, predict_fn, sample_count, rng_key, extras):
   processed_samples = 0
   preds = []
   outputs = []
+  aux_infos = []
   while processed_samples < sample_count:
     feedback = next(sampler)
     batch_size = feedback.outputs[0].data.shape[0]
     outputs.append(feedback.outputs)
     new_rng_key, rng_key = jax.random.split(rng_key)
     cur_preds, _, aux_info = predict_fn(new_rng_key, feedback.features)
+    aux_infos.append(aux_info)
     preds.append(cur_preds)
     processed_samples += batch_size
   outputs = _concat(outputs, axis=0)
@@ -277,7 +279,7 @@ def collect_and_eval(sampler, predict_fn, sample_count, rng_key, extras):
   out = clrs.evaluate(outputs, preds)
   if extras:
     out.update(extras)
-  return {k: unpack(v) for k, v in out.items()}, aux_info
+  return {k: unpack(v) for k, v in out.items()}, aux_infos
 
 def model_weight_norms(params):
   norm_sq_sum = 0
@@ -572,7 +574,7 @@ def main(cfg):
 
         # Validation info.
         new_rng_key, rng_key = jax.random.split(rng_key)
-        val_stats, aux_val_info = collect_and_eval(
+        val_stats, aux_val_infos = collect_and_eval(
             val_samplers[algo_idx],
             functools.partial(eval_model.predict, algorithm_index=algo_idx),
             val_sample_counts[algo_idx],
@@ -580,7 +582,7 @@ def main(cfg):
             extras=common_extras)
         
 
-        test_stats, aux_test_info = collect_and_eval(
+        test_stats, aux_test_infos = collect_and_eval(
             test_samplers[algo_idx],
             functools.partial(eval_model.predict, algorithm_index=algo_idx),
             test_sample_counts[algo_idx],
@@ -593,11 +595,13 @@ def main(cfg):
         wandb_log[f"test_score_current_model_{FLAGS.algorithms[algo_idx]}"] = test_stats['score']
         val_scores[algo_idx] = val_stats['score']
 
-        for (key, value) in aux_val_info.items():
-          wandb_log[f"{FLAGS.algorithms[algo_idx]}_val_{key}"] = value.mean()
+        aux_val_agg_info = dict([(key, np.mean(np.array([np.mean(c[key]) for c in aux_val_infos]))) for key in aux_val_infos[0].keys()])
+        aux_test_agg_info = dict([(key, np.mean(np.array([np.mean(c[key]) for c in aux_test_infos]))) for key in aux_test_infos[0].keys()])
+        for (key, value) in aux_val_agg_info.items():
+          wandb_log[f"{FLAGS.algorithms[algo_idx]}_val_{key}"] = value
 
-        for (key, value) in aux_test_info.items():
-          wandb_log[f"{FLAGS.algorithms[algo_idx]}_test_{key}"] = value.mean()
+        for (key, value) in aux_test_agg_info.items():
+          wandb_log[f"{FLAGS.algorithms[algo_idx]}_test_{key}"] = value
 
       next_eval += FLAGS.eval_every
 
@@ -643,7 +647,7 @@ def main(cfg):
                      'algorithm': FLAGS.algorithms[algo_idx]}
 
     new_rng_key, rng_key = jax.random.split(rng_key)
-    test_stats, final_test_aux_info = collect_and_eval(
+    test_stats, final_test_aux_infos = collect_and_eval(
         test_samplers[algo_idx],
         functools.partial(eval_model.predict, algorithm_index=algo_idx),
         test_sample_counts[algo_idx],
