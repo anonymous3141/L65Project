@@ -108,8 +108,8 @@ def evaluate_hints(
   hint_preds = [_reduce_permutations_dict(h) for h in hint_preds]
   for truth in hints:
     assert truth.name in hint_preds[0]
-    eval_along_time, _ = [_evaluate(truth, p[truth.name],
-                                 idx=i+1, lengths=lengths)
+    eval_along_time = [_evaluate(truth, p[truth.name],
+                                 idx=i+1, lengths=lengths)[0]
                        for (i, p) in enumerate(hint_preds)]
     evals[truth.name] = np.sum(
         [x * np.sum(i+1 < lengths)
@@ -153,9 +153,17 @@ def _evaluate(truth, pred, idx=None, lengths=None) -> Dict[str, Union[np.ndarray
   pred_data = pred.data
   if idx is not None:
     if np.all(idx >= lengths):
-      return 0.
-    truth_data = truth_data[idx][idx < lengths]
-    pred_data = pred_data[idx < lengths]
+      return 0., {}
+    try:
+      truth_data = truth_data[idx][idx < lengths]
+      pred_data = pred_data[idx < lengths]
+    except IndexError: # the above will fail for kadane, so the below is a workaround
+      max_length = int(lengths[idx])
+      truth_data = truth_data[idx][:max_length]
+      pred_data = pred_data[:max_length]
+
+  if pred_data.shape != truth_data.shape: # happens for pred_h in insertion sort currently
+    return 0., {}
   
   result = _EVAL_FN[truth.type_](pred_data, truth_data)
 

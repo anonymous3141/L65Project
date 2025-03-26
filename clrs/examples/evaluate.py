@@ -3,6 +3,7 @@
 import functools
 import os
 import shutil
+import pickle
 from typing import Any, Dict, List, Optional
 
 from absl import logging
@@ -12,6 +13,70 @@ import numpy as np
 import requests
 import tensorflow as tf
 import hydra
+from clrs._src import probing, specs
+import wandb
+
+
+def get_runs(entity, project, algorithm):
+    api = wandb.Api(timeout=30)
+    wandb_filters = {
+        "created_at": {"$gt": "2025-03-22T01"},
+    }
+    runs = api.runs(f"{entity}/{project}", filters=wandb_filters)
+    logging.info(f"Found {len(runs)} runs.")
+    data = {}
+    for run in runs:
+        if (
+            run.config["algorithms"] != [algorithm]
+            or run.summary.get("_step", 0) < 80000
+            or run.config["eval_every"] != 500
+        ):
+            logging.info(
+                f"Skipping run {run.id} with algorithm {run.config['algorithms']} and steps {run.summary.get('_step', 0)}"
+            )
+            continue
+
+        if (
+            data.get(
+                (
+                    run.config["processor_type"],
+                    run.config["hint_teacher_forcing"],
+                    run.config["seed"],
+                )
+            )
+            is None
+        ):
+            data[
+                (
+                    run.config["processor_type"],
+                    run.config["hint_teacher_forcing"],
+                    run.config["seed"],
+                )
+            ] = run
+
+    return data
+
+
+def download_model_from_artifact(run, download_dir="clrs/examples/artifacts"):
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
+    artifact_name = f"run-{run.id}-best.pkl"
+    new_file_path = os.path.join(download_dir, artifact_name)
+
+    if not os.path.exists(new_file_path):
+        api = wandb.Api()
+        artifact_name = f"run-{run.id}-best.pkl"
+        artifact = api.artifact(f"{run.entity}/{run.project}/{artifact_name}:latest")
+        artifact_dir = artifact.download(root=download_dir)
+
+        downloaded_file_path = os.path.join(artifact_dir, "best.pkl")
+        shutil.move(downloaded_file_path, new_file_path)
+        logging.info(f"Downloaded and renamed artifact to {new_file_path}")
+    else:
+        logging.info(f"Artifact exists at {new_file_path}")
+    return new_file_path
+
 
 FLAGS = None
 
@@ -150,6 +215,39 @@ def _concat(dps, axis):
     return jax.tree_util.tree_map(lambda *x: np.concatenate(x, axis), *dps)
 
 
+def transform_hint_preds(cur_hint_preds):
+    """Convert raw hint predictions into the correct format for evaluate_hints."""
+    transformed_preds = []
+
+    for step_pred in cur_hint_preds:
+        # In insertion sort, each step is a dictionary of { "i": ..., "j": ..., "pred_h": ... }
+        # In kadane, each step is a dictionary of { "i": .., "j": .., "best_high": .., "best_low": .., "best_sum": .., "sum": ..}
+        transformed_step = {}
+
+        for key, value in step_pred.items():
+            # Determine the correct type for the hint
+            if key in ["i", "j", "best_high", "best_low"]:
+                type_ = specs.Type.MASK_ONE
+                location = specs.Location.NODE
+            elif key == "pred_h":  # insertion sort
+                type_ = specs.Type.POINTER
+                location = specs.Location.NODE
+            elif key in ["best_sum", "sum"]:
+                type_ = specs.Type.SCALAR
+                location = specs.Location.GRAPH
+            else:
+                raise ValueError(f"Unknown hint key: {key}")
+
+            # Wrap array in probing.DataPoint
+            transformed_step[key] = probing.DataPoint(
+                name=key, type_=type_, data=value, location=location
+            )
+
+        transformed_preds.append(transformed_step)
+
+    return transformed_preds  # This is now in the correct format for evaluate_hints
+
+
 def log_debug_infos(debug_infos):
     for debug_info in debug_infos:
         logging.info("New example")
@@ -176,22 +274,48 @@ def collect_and_eval(sampler, predict_fn, sample_count, rng_key, extras):
     processed_samples = 0
     preds = []
     outputs = []
+    hints = []
+    hint_preds = []
+    lengths = []
     while processed_samples < sample_count:
         feedback = next(sampler)
         batch_size = feedback.outputs[0].data.shape[0]
-        outputs.append(feedback.outputs)
+        cur_outputs = feedback.outputs
+        cur_hints = feedback.features.hints
+        cur_lengths = feedback.features.lengths
+
+        outputs.append(cur_outputs)
+        hints.append(cur_hints)
+        lengths.append(cur_lengths)
+
         new_rng_key, rng_key = jax.random.split(rng_key)
-        cur_preds, _, aux_info = predict_fn(new_rng_key, feedback.features)
+        cur_preds, cur_hint_preds, aux_info = predict_fn(new_rng_key, feedback.features)
+        cur_hint_preds = transform_hint_preds(cur_hint_preds)
+
         preds.append(cur_preds)
+        hint_preds.append(cur_hint_preds)
         processed_samples += batch_size
+
     outputs = _concat(outputs, axis=0)
     preds = _concat(preds, axis=0)
+    hints = _concat(hints, axis=1)
+    hint_preds = _concat(hint_preds, axis=0)
+    lengths = _concat(lengths, axis=0)
+
     logging.info(f"Outputs length: {len(outputs)}")
+    logging.info(f"hints: {hints}")
+    logging.info(f"outputs: {outputs}")
+    logging.info(f"preds: {preds}")
+
     out, debug_infos = clrs.evaluate(outputs, preds)
-    log_debug_infos(debug_infos)
+    out_hints = clrs.evaluate_hints(hints, lengths, hint_preds)
+
+    logging.info(f"Output hints {out_hints}")
+    # log_debug_infos(debug_infos)
+    logging.info(f"Output predictions {out}")
     if extras:
         out.update(extras)
-    return {k: unpack(v) for k, v in out.items()}, aux_info
+    return {k: unpack(v) for k, v in out.items()}, aux_info, out_hints
 
 
 def model_weight_norms(params):
@@ -288,30 +412,30 @@ def create_samplers(
                 chunk_length=FLAGS.chunk_length,
             )
 
-            train_args = dict(
-                sizes=train_lengths,
-                split="train",
-                batch_size=train_batch_size,
-                multiplier=-1,
-                randomize_pos=FLAGS.random_pos,
-                chunked=FLAGS.chunked_training,
-                sampler_kwargs=sampler_kwargs,
-                **common_sampler_args,
-            )
-            #train_sampler, _, spec = make_multi_sampler(**train_args)
+            # train_args = dict(
+            #     sizes=train_lengths,
+            #     split="train",
+            #     batch_size=train_batch_size,
+            #     multiplier=-1,
+            #     randomize_pos=FLAGS.random_pos,
+            #     chunked=FLAGS.chunked_training,
+            #     sampler_kwargs=sampler_kwargs,
+            #     **common_sampler_args,
+            # )
+            # train_sampler, _, spec = make_multi_sampler(**train_args)
 
             mult = clrs.CLRS_30_ALGS_SETTINGS[algorithm]["num_samples_multiplier"]
-            val_args = dict(
-                sizes=val_lengths or [np.amax(train_lengths)],
-                split="val",
-                batch_size=val_batch_size,
-                multiplier=2 * mult,
-                randomize_pos=FLAGS.random_pos,
-                chunked=False,
-                sampler_kwargs=sampler_kwargs,
-                **common_sampler_args,
-            )
-            #val_sampler, val_samples, spec = make_multi_sampler(**val_args)
+            # val_args = dict(
+            #     sizes=val_lengths or [np.amax(train_lengths)],
+            #     split="val",
+            #     batch_size=val_batch_size,
+            #     multiplier=2 * mult,
+            #     randomize_pos=FLAGS.random_pos,
+            #     chunked=False,
+            #     sampler_kwargs=sampler_kwargs,
+            #     **common_sampler_args,
+            # )
+            # val_sampler, val_samples, spec = make_multi_sampler(**val_args)
 
             test_args = dict(
                 sizes=test_lengths or [-1],
@@ -326,9 +450,9 @@ def create_samplers(
             test_sampler, test_samples, spec = make_multi_sampler(**test_args)
 
         spec_list.append(spec)
-        #train_samplers.append(train_sampler)
-        #val_samplers.append(val_sampler)
-        #val_sample_counts.append(val_samples)
+        # train_samplers.append(train_sampler)
+        # val_samplers.append(val_sampler)
+        # val_sample_counts.append(val_samples)
         test_samplers.append(test_sampler)
         test_sample_counts.append(test_samples)
 
@@ -342,32 +466,9 @@ def create_samplers(
     )
 
 
-@hydra.main(config_path=".", config_name="config", version_base=None)
-def evaluate_saved_model(cfg):
-    global FLAGS
-    FLAGS = cfg
-    print(FLAGS)
-
-    checkpoint_dirs = []
-    if "differential_mpnn_maxmax" in FLAGS.processor_type:
-        checkpoint_dirs.append(
-            "2025-03-17 22:17:26-['insertion_sort']-differential_mpnn_maxmax"
-        )
-    if "mpnn" in FLAGS.processor_type:
-        checkpoint_dirs.append("2025-03-18 09:01:59-['insertion_sort']-mpnn")
-    
-    if len(checkpoint_dirs) == 0:
-        raise ValueError("Processor type not in {differential_mpnn_maxmax, mpnn}.")
-
-    model_paths = [
-        os.path.join(os.path.join(FLAGS.checkpoint_path, checkpoint_dir), "best.pkl")
-        for checkpoint_dir in checkpoint_dirs
-    ]
-
-    for model_path in model_paths:
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found at {model_path}")
-
+def evaluate_model_from_run(
+    run, algorithm, rng_key, test_samplers, test_sample_counts, spec_list, seed
+):
     if FLAGS.hint_mode == "encoded_decoded":
         encode_hints = True
         decode_hints = True
@@ -379,28 +480,6 @@ def evaluate_saved_model(cfg):
         decode_hints = False
     else:
         raise ValueError("Hint mode not in {encoded_decoded, decoded_only, none}.")
-
-    train_lengths = [int(x) for x in FLAGS.train_lengths]
-
-    rng = np.random.RandomState(FLAGS.seed)
-    rng_key = jax.random.PRNGKey(rng.randint(2**32))
-
-    # Create samplers
-    (
-        _,
-        _,
-        _,
-        test_samplers,
-        test_sample_counts,
-        spec_list,
-    ) = create_samplers(
-        rng=rng,
-        train_lengths=train_lengths,
-        algorithms=FLAGS.algorithms,
-        val_lengths=[np.amax(train_lengths)],
-        test_lengths=[-1],
-        train_batch_size=FLAGS.batch_size,
-    )
 
     processor_factory = clrs.get_processor_factory(
         FLAGS.processor_type,
@@ -432,26 +511,203 @@ def evaluate_saved_model(cfg):
         **model_params,
     )
 
+    # Download and load the model artifact
+    model_path = download_model_from_artifact(run)
+    eval_model.restore_model(model_path, only_load_processor=False)
+
     for algo_idx in range(len(test_samplers)):
-        common_extras = {"algorithm": FLAGS.algorithms[algo_idx]}
+        common_extras = {"algorithm": algorithm}
 
         new_rng_key, rng_key = jax.random.split(rng_key)
-        
-        for model_path in model_paths:
 
-            eval_model.restore_model(model_path, only_load_processor=False)
+        test_stats, final_test_aux_info, out_hints = collect_and_eval(
+            test_samplers[algo_idx],
+            functools.partial(
+                eval_model.predict, algorithm_index=algo_idx, return_hints=True
+            ),
+            test_sample_counts[algo_idx],
+            new_rng_key,
+            extras=common_extras,
+        )
+        logging.info(
+            "(test model %s) algo %s : %s",
+            run.id,
+            algorithm,
+            test_stats,
+        )
 
-            test_stats, final_test_aux_info = collect_and_eval(
-                test_samplers[algo_idx],
-                functools.partial(eval_model.predict, algorithm_index=algo_idx, return_hints=True),
-                test_sample_counts[algo_idx],
-                new_rng_key,
-                extras=common_extras,
+        hint_output_dir = os.path.join("clrs/examples", "hint_outputs")
+        os.makedirs(hint_output_dir, exist_ok=True)
+
+        np.savez_compressed(
+            f"{hint_output_dir}/{algorithm}_{seed}_{FLAGS.processor_type}_{FLAGS.hint_teacher_forcing}.npz",
+            **out_hints,
+        )
+
+
+def evaluate_model_from_local_files(
+    file_path, algorithm, rng_key, test_samplers, test_sample_counts, spec_list, seed
+):
+    if FLAGS.hint_mode == "encoded_decoded":
+        encode_hints = True
+        decode_hints = True
+    elif FLAGS.hint_mode == "decoded_only":
+        encode_hints = False
+        decode_hints = True
+    elif FLAGS.hint_mode == "none":
+        encode_hints = False
+        decode_hints = False
+    else:
+        raise ValueError("Hint mode not in {encoded_decoded, decoded_only, none}.")
+
+    processor_factory = clrs.get_processor_factory(
+        FLAGS.processor_type,
+        use_ln=FLAGS.use_ln,
+        nb_triplet_fts=FLAGS.nb_triplet_fts,
+        nb_heads=FLAGS.nb_heads,
+        mpnn_aggregator=FLAGS.mpnn_processor_aggregator,
+    )
+    model_params = dict(
+        processor_factory=processor_factory,
+        hidden_dim=FLAGS.hidden_size,
+        encode_hints=encode_hints,
+        decode_hints=decode_hints,
+        encoder_init=FLAGS.encoder_init,
+        use_lstm=FLAGS.use_lstm,
+        learning_rate=FLAGS.learning_rate,
+        grad_clip_max_norm=FLAGS.grad_clip_max_norm,
+        checkpoint_path=FLAGS.checkpoint_path,
+        freeze_processor=FLAGS.freeze_processor,
+        dropout_prob=FLAGS.dropout_prob,
+        hint_teacher_forcing=FLAGS.hint_teacher_forcing,
+        hint_repred_mode=FLAGS.hint_repred_mode,
+        nb_msg_passing_steps=FLAGS.nb_msg_passing_steps,
+    )
+
+    eval_model = clrs.models.BaselineModel(
+        spec=spec_list,
+        dummy_trajectory=[next(t) for t in test_samplers],
+        **model_params,
+    )
+
+    eval_model.restore_model(file_path, only_load_processor=False)
+
+    for algo_idx in range(len(test_samplers)):
+        common_extras = {"algorithm": algorithm}
+
+        new_rng_key, rng_key = jax.random.split(rng_key)
+
+        test_stats, final_test_aux_info, out_hints = collect_and_eval(
+            test_samplers[algo_idx],
+            functools.partial(
+                eval_model.predict, algorithm_index=algo_idx, return_hints=True
+            ),
+            test_sample_counts[algo_idx],
+            new_rng_key,
+            extras=common_extras,
+        )
+        logging.info(
+            "(test model from %s) algo %s : %s",
+            file_path,
+            algorithm,
+            test_stats,
+        )
+
+        hint_output_dir = os.path.join("clrs/examples", "hint_outputs")
+        os.makedirs(hint_output_dir, exist_ok=True)
+
+        np.savez_compressed(
+            f"{hint_output_dir}/{algorithm}_{seed}_{FLAGS.processor_type}_{FLAGS.hint_teacher_forcing}.npz",
+            **out_hints,
+        )
+
+
+@hydra.main(config_path=".", config_name="config", version_base=None)
+def main(cfg):
+    global FLAGS
+    FLAGS = cfg
+    print(FLAGS)
+
+    local_model = True
+
+    if local_model:
+        algorithm = "find_maximum_subarray_kadane"
+        local_files = [
+            "checkpointsforcarla/2025-03-24 17:36:36-['find_maximum_subarray_kadane']-differential_mpnn_maxmax/best.pkl",
+            "checkpointsforcarla/2025-03-24 17:50:43-['find_maximum_subarray_kadane']-differential_mpnn_maxmax/best.pkl",
+            "checkpointsforcarla/2025-03-24 17:57:49-['find_maximum_subarray_kadane']-differential_mpnn_maxmax/best.pkl",
+            "checkpointsforcarla/2025-03-25 05:01:27-['find_maximum_subarray_kadane']-mpnn/best.pkl",
+            "checkpointsforcarla/2025-03-25 05:04:47-['find_maximum_subarray_kadane']-mpnn/best.pkl",
+            "checkpointsforcarla/2025-03-25 05:09:58-['find_maximum_subarray_kadane']-mpnn/best.pkl"
+        ]
+        logging.info(f"{len(local_files)} local files found.")
+        for file in local_files:
+            if not os.path.exists(file):
+                raise ValueError("File does not exist")
+    else:
+        algorithm = "insertion_sort"
+        data = get_runs(
+            "biermann-carla-university-of-cambridge", "L65-project", algorithm
+        )
+        logging.info(f"{len(data)} runs found.")
+        logging.info(data)
+
+    FLAGS.algorithms = [algorithm]
+
+    train_lengths = [int(x) for x in FLAGS.train_lengths]
+
+    rng = np.random.RandomState(FLAGS.seed)
+    rng_key = jax.random.PRNGKey(rng.randint(2**32))
+
+    # Create samplers
+    (
+        _,
+        _,
+        _,
+        test_samplers,
+        test_sample_counts,
+        spec_list,
+    ) = create_samplers(
+        rng=rng,
+        train_lengths=train_lengths,
+        algorithms=FLAGS.algorithms,
+        val_lengths=[np.amax(train_lengths)],
+        test_lengths=[-1],
+        train_batch_size=FLAGS.batch_size,
+    )
+
+    FLAGS.checkpoint_path = ""
+
+    if local_model:
+        for i, model in enumerate(local_files):
+            if "maxmax" in model:
+                processor_type = "differential_mpnn_maxmax" 
+            else:
+                processor_type = "mpnn"
+            seed = i%3
+            FLAGS.processor_type = processor_type
+            evaluate_model_from_local_files(
+                model, algorithm, rng_key, test_samplers, test_sample_counts, spec_list, seed
             )
-            logging.info(
-                "(test model %s) algo %s : %s", model_path, FLAGS.algorithms[algo_idx], test_stats
+
+    else:
+        # Loop through each run and evaluate it
+        for key, run in data.items():
+            logging.info(f"Evaluating run {run.id}...")
+            processor_type, hint_teacher_forcing, seed = key
+            FLAGS.processor_type = processor_type
+            FLAGS.hint_teacher_forcing = hint_teacher_forcing
+            # FLAGS.seed = seed # have same test set for all
+            evaluate_model_from_run(
+                run,
+                algorithm,
+                rng_key,
+                test_samplers,
+                test_sample_counts,
+                spec_list,
+                seed,
             )
 
 
 if __name__ == "__main__":
-    evaluate_saved_model()
+    main()
